@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-2">
+
+    <!-- BARRA DE BÚSQUEDA CENTRADA -->
+    <div class="row justify-content-center mb-5">
+        <div class="col-md-6 col-lg-5">
+            <div class="input-group input-group-lg shadow-sm rounded-pill overflow-hidden border">
+                <span class="input-group-text bg-white border-0 ps-3">🔍</span>
+                <input type="text" id="searchInput" class="form-control border-0 shadow-none pe-3" placeholder="Buscar solicitud..." onkeyup="filtrarTarjetas()">
+                <button class="btn btn-white text-muted border-0 pe-3" type="button" onclick="limpiarBusqueda()">✕</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TARJETAS -->
+    <div class="row row-cols-1 row-cols-md-3 g-4 mb-5" id="cardsContainer">
+        {% for s in solicitudes %}
+        <div class="col card-item">
+            <div class="card h-100 shadow-sm border-0 rounded-4 overflow-hidden position-relative">
+                
+                <!-- REQUERIMIENTO 1: Muestra la Imagen Custom cargada -->
+                <div class="ratio ratio-16x9 bg-secondary-subtle">
+                    <img src="{{ s.imagen_url }}" class="card-img-top object-fit-cover" alt="{{ s.organizacion }}">
+                </div>
+
+                <div class="card-body d-flex flex-column p-4">
+                    <h4 class="card-title fw-bold text-dark text-truncate mb-1">{{ s.organizacion }}</h4>
+                    
+                    <p class="small text-muted mb-2">Contacto: <strong>{{ s.contacto }}</strong></p>
+                    <p class="card-text text-secondary mb-3 flex-grow-1">{{ s.descripcion }}</p>
+
+                    <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                        <span class="badge rounded-pill {% if s.status == 'ACCEPTED' %}bg-success{% elif s.status == 'DECLINED' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                            {{ s.status }}
+                        </span>
+
+                        <div class="btn-group">
+                            <a href="mailto:{{ s.contacto }}" class="btn btn-sm btn-outline-primary rounded-pill px-3 me-1">
+                                Contactar
+                            </a>
+
+                            <!-- REQUERIMIENTO 4: Solo muestra borrar si es ADMIN o es el creador de la solicitud -->
+                            {% if user.role == 'ADMIN' or user.email == s.user_email %}
+                            <form action="/requests/delete/{{ s.id }}" method="POST" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-2" onclick="return confirm('¿Borrar solicitud?')">
+                                    🗑️
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12 text-center py-5 text-muted">
+            <p class="fs-5">No hay solicitudes aceptadas o disponibles para mostrar.</p>
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+
+<!-- BOTÓN FLOTANTE [+] ABAJO A LA IZQUIERDA -->
+<a href="/requests/new" class="btn btn-dark rounded-3 shadow-lg position-fixed bottom-0 start-0 m-4 d-flex align-items-center justify-content-center" style="width: 60px; height: 60px; z-index: 1050; border: 2px solid #000;" title="Crear Solicitud">
+    <span class="fs-1 fw-bold text-white mb-1">+</span>
+</a>
+
+<script>
+function filtrarTarjetas() {
+    let input = document.getElementById('searchInput').value.toLowerCase();
+    let cards = document.getElementsByClassName('card-item');
+    for (let card of cards) {
+        let texto = card.innerText.toLowerCase();
+        card.style.display = texto.includes(input) ? "" : "none";
+    }
+}
+function limpiarBusqueda() {
+    document.getElementById('searchInput').value = '';
+    filtrarTarjetas();
+}
+</script>
+{% endblock %}

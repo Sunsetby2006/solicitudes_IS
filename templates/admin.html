@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Panel de Administración</h2>
+
+<h4 class="mt-4 text-danger">Registro de Eliminadas (ViewRegistry)</h4>
+<table class="table table-bordered bg-white shadow-sm mb-5">
+    <thead class="table-danger">
+        <tr>
+            <th>ID</th>
+            <th>Organización</th>
+            <th>Contacto</th>
+            <th>Descripción</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for e in eliminadas %}
+        <tr>
+            <td>{{ e.id }}</td>
+            <td>{{ e.organizacion }}</td>
+            <td>{{ e.contacto }}</td>
+            <td>{{ e.descripcion }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="text-center text-muted">No hay elementos eliminados registrados.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h4>Gestión de Solicitudes (Aceptar / Rechazar)</h4>
+<table class="table table-striped bg-white shadow-sm">
+    <thead class="table-dark">
+        <tr>
+            <th>Organización</th>
+            <th>Estado Actual</th>
+            <th>Acciones Admin</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in todas %}
+        <tr>
+            <td>{{ s.organizacion }}</td>
+            <td><strong>{{ s.status }}</strong></td>
+            <td>
+                <!-- AcceptRequest -->
+                <form action="/admin/status/{{ s.id }}" method="POST" class="d-inline">
+                    <input type="hidden" name="status" value="ACCEPTED">
+                    <button class="btn btn-success btn-sm">Aceptar</button>
+                </form>
+                <!-- DeclineRequest -->
+                <form action="/admin/status/{{ s.id }}" method="POST" class="d-inline">
+                    <input type="hidden" name="status" value="DECLINED">
+                    <button class="btn btn-warning btn-sm">Rechazar</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
