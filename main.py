@@ -1,21 +1,12 @@
 import io
-import os
-import uuid
 import base64
-from datetime import datetime
 
 import pyotp
 import qrcode
 
-from fastapi import FastAPI, Request, Form, Response, Depends
+from fastapi import FastAPI, Request, Form, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
-
-from db import get_db
-from modelos import Usuario
 
 
 app = FastAPI(title="Solicitudes APP")
@@ -34,8 +25,7 @@ def health_check():
 # CONFIGURACIÓN
 # ==========================================
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+templates = Jinja2Templates(directory="templates")
 
 
 # ==========================================
@@ -88,15 +78,13 @@ def get_current_user(request: Request):
 
     user_email = request.cookies.get("user_email")
     user_role = request.cookies.get("user_role")
-    user_id = request.cookies.get("user_id")
 
     if not user_email:
         return None
 
     return {
         "email": user_email,
-        "role": user_role,
-        "id": user_id
+        "role": user_role
     }
 
 
@@ -108,11 +96,11 @@ def get_current_user(request: Request):
 def pantalla_login(request: Request):
 
     """
-    Pantalla 1: Login por correo.
+    Pantalla 1: Login con selección de rol.
 
-    El correo se valida contra la tabla `usuarios` (ver db.py);
-    el rol ya no se elige a mano. OAuth real de Google sigue
-    pendiente como siguiente paso.
+    NOTA:
+    Actualmente sigue siendo una simulación.
+    Posteriormente cambiaremos esto por autenticación real.
     """
 
     return templates.TemplateResponse(
@@ -127,50 +115,18 @@ def pantalla_login(request: Request):
 
 @app.post("/auth/google")
 def login_google(
-    request: Request,
-    email: str = Form(...),
-    db: Session = Depends(get_db)
+    response: Response,
+    role: str = Form(...),
+    email: str = Form(...)
 ):
 
     """
-    Valida que el correo exista y esté activo en la tabla
-    `usuarios`. El rol YA NO se elige en el formulario:
-    se toma el que tiene el usuario en la base de datos.
+    Actualmente solamente guarda temporalmente
+    el email y rol seleccionado.
 
-    El nombre /auth/google sigue siendo provisional.
-    Todavía NO estamos utilizando OAuth de Google (ese es el
-    siguiente paso: hoy solo se valida el correo contra la DB).
+    El nombre /auth/google es provisional.
+    Todavía NO estamos utilizando OAuth de Google.
     """
-
-    try:
-        usuario = (
-            db.query(Usuario)
-            .filter(
-                Usuario.email == email,
-                Usuario.esta_activo.is_(True)
-            )
-            .first()
-        )
-    except SQLAlchemyError:
-        return templates.TemplateResponse(
-            request=request,
-            name="login.html",
-            context={
-                "error": (
-                    "No se pudo conectar con la base de datos. "
-                    "Revisa las variables DB_* en tu .env."
-                )
-            }
-        )
-
-    if usuario is None:
-        return templates.TemplateResponse(
-            request=request,
-            name="login.html",
-            context={
-                "error": "No existe una cuenta activa con ese correo."
-            }
-        )
 
     redirect = RedirectResponse(
         url="/auth/mfa",
@@ -179,17 +135,12 @@ def login_google(
 
     redirect.set_cookie(
         key="temp_email",
-        value=usuario.email
+        value=email
     )
 
     redirect.set_cookie(
         key="temp_role",
-        value=usuario.rol
-    )
-
-    redirect.set_cookie(
-        key="temp_user_id",
-        value=str(usuario.id)
+        value=role
     )
 
     return redirect
@@ -328,8 +279,7 @@ def pantalla_mfa(request: Request):
 @app.post("/auth/mfa/verify")
 def verificar_mfa(
     request: Request,
-    codigo_otp: str = Form(...),
-    db: Session = Depends(get_db)
+    codigo_otp: str = Form(...)
 ):
 
     """
@@ -353,7 +303,7 @@ def verificar_mfa(
             }
         )
 
-    # Recuperar datos temporales guardados en /auth/google
+    # Recuperar datos temporales
     email = request.cookies.get(
         "temp_email",
         "usuario@gmail.com"
@@ -363,25 +313,6 @@ def verificar_mfa(
         "temp_role",
         "USER"
     )
-
-    user_id = request.cookies.get("temp_user_id")
-
-    if user_id:
-        try:
-            usuario_db = (
-                db.query(Usuario)
-                .filter(Usuario.id == uuid.UUID(user_id))
-                .first()
-            )
-
-            if usuario_db:
-                usuario_db.ultlogin = datetime.utcnow()
-                db.commit()
-
-        except (SQLAlchemyError, ValueError):
-            # No bloqueamos el login por esto; solo no se
-            # registra la fecha de último acceso.
-            db.rollback()
 
     # Crear sesión
     redirect = RedirectResponse(
@@ -399,16 +330,9 @@ def verificar_mfa(
         value=role
     )
 
-    if user_id:
-        redirect.set_cookie(
-            key="user_id",
-            value=user_id
-        )
-
     # Eliminar cookies temporales
     redirect.delete_cookie("temp_email")
     redirect.delete_cookie("temp_role")
-    redirect.delete_cookie("temp_user_id")
 
     return redirect
 
@@ -427,7 +351,6 @@ def logout():
 
     redirect.delete_cookie("user_email")
     redirect.delete_cookie("user_role")
-    redirect.delete_cookie("user_id")
 
     return redirect
 

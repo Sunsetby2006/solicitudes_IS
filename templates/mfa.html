@@ -13,6 +13,13 @@
         <p class="text-center small mb-4">
             Ingresa el código de 6 dígitos de tu aplicación autenticadora.
         </p>
+
+        {% if error %}
+        <div class="alert alert-danger rounded-0 border border-danger py-2 small text-center">
+            {{ error }}
+        </div>
+        {% endif %}
+
         <form action="/auth/mfa/verify" method="POST">
             <div class="mb-4">
                 <label class="form-label small fw-bold text-uppercase">
