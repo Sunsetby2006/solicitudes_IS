@@ -6,3 +6,5 @@ dotenv
 psycopg2-binary
 sqlalchemy
 python-dotenv
+pyotp
+qrcode

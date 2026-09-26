@@ -24,7 +24,7 @@
         <tr>
             <td>{{ e.id }}</td>
             <td>{{ e.organizacion }}</td>
-            <td>{{ e.contacto }}</td>
+            <td>{{ e.correo_contacto }}</td>
             <td>{{ e.descripcion }}</td>
         </tr>
         {% else %}
@@ -64,12 +64,12 @@
 
             <td>
 
-                {% if s.status == "ACCEPTED" %}
+                {% if s.estatus == "Aceptado" %}
                     <span class="badge bg-success">
                         Aceptada
                     </span>
 
-                {% elif s.status == "DECLINED" %}
+                {% elif s.estatus == "Rechazado" %}
                     <span class="badge bg-danger">
                         Rechazada
                     </span>
@@ -92,7 +92,7 @@
                     <input
                         type="hidden"
                         name="status"
-                        value="ACCEPTED"
+                        value="Aceptado"
                     >
 
                     <button
@@ -110,11 +110,11 @@
                     <input
                         type="hidden"
                         name="status"
-                        value="DECLINED"
+                        value="Rechazado"
                     >
 
                     <button
-                        class="btn btn-warning btn-sm"
+                        class="btn btn-danger btn-sm"
                     >
                         Rechazar
                     </button>

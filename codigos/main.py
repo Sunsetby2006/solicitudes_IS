@@ -7,7 +7,7 @@ from datetime import datetime
 import pyotp
 import qrcode
 
-from fastapi import FastAPI, Request, Form, Response, Depends
+from fastapi import FastAPI, Request, Form, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -15,14 +15,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
 from db import get_db
-from modelos import Usuario
+from modelos import Usuario, Solicitud, HistorialSolicitud
 
 
 app = FastAPI(title="Solicitudes APP")
 
 
 # ==========================================
-# HEALTH CHECK (usado por Render y por el pipeline)
+# HEALTH CHECK
 # ==========================================
 
 @app.get("/health")
@@ -42,42 +42,7 @@ templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 # GOOGLE AUTHENTICATOR
 # ==========================================
 
-# IMPORTANTE:
-# Por ahora usamos una clave global únicamente para probar
-# el funcionamiento del autenticador.
-#
-# Más adelante esta clave debe guardarse en la base de datos
-# y cada usuario tendrá su propio secreto.
-
 MFA_SECRET = pyotp.random_base32()
-
-
-# ==========================================
-# BASE DE DATOS SIMULADA
-# ==========================================
-
-MOCK_REQUESTS = [
-
-    {
-        "id": 1,
-        "organizacion": "Tech Corp",
-        "contacto": "juan@tech.com",
-        "descripcion": "Soporte para servidores",
-        "status": "ACCEPTED",
-        "deleted": False,
-        "user_email": "usuario@gmail.com"
-    },
-
-    {
-        "id": 2,
-        "organizacion": "Dev Inc",
-        "contacto": "ana@dev.com",
-        "descripcion": "Licencia de software",
-        "status": "PENDING",
-        "deleted": False,
-        "user_email": "otro@gmail.com"
-    }
-]
 
 
 # ==========================================
@@ -85,12 +50,11 @@ MOCK_REQUESTS = [
 # ==========================================
 
 def get_current_user(request: Request):
-
     user_email = request.cookies.get("user_email")
     user_role = request.cookies.get("user_role")
     user_id = request.cookies.get("user_id")
 
-    if not user_email:
+    if not user_email or not user_id:
         return None
 
     return {
@@ -106,15 +70,6 @@ def get_current_user(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 def pantalla_login(request: Request):
-
-    """
-    Pantalla 1: Login por correo.
-
-    El correo se valida contra la tabla `usuarios` (ver db.py);
-    el rol ya no se elige a mano. OAuth real de Google sigue
-    pendiente como siguiente paso.
-    """
-
     return templates.TemplateResponse(
         request=request,
         name="login.html"
@@ -131,17 +86,6 @@ def login_google(
     email: str = Form(...),
     db: Session = Depends(get_db)
 ):
-
-    """
-    Valida que el correo exista y esté activo en la tabla
-    `usuarios`. El rol YA NO se elige en el formulario:
-    se toma el que tiene el usuario en la base de datos.
-
-    El nombre /auth/google sigue siendo provisional.
-    Todavía NO estamos utilizando OAuth de Google (ese es el
-    siguiente paso: hoy solo se valida el correo contra la DB).
-    """
-
     try:
         usuario = (
             db.query(Usuario)
@@ -156,10 +100,7 @@ def login_google(
             request=request,
             name="login.html",
             context={
-                "error": (
-                    "No se pudo conectar con la base de datos. "
-                    "Revisa las variables DB_* en tu .env."
-                )
+                "error": "No se pudo conectar con la base de datos. Revisa tus variables de entorno."
             }
         )
 
@@ -177,20 +118,9 @@ def login_google(
         status_code=303
     )
 
-    redirect.set_cookie(
-        key="temp_email",
-        value=usuario.email
-    )
-
-    redirect.set_cookie(
-        key="temp_role",
-        value=usuario.rol
-    )
-
-    redirect.set_cookie(
-        key="temp_user_id",
-        value=str(usuario.id)
-    )
+    redirect.set_cookie(key="temp_email", value=usuario.email)
+    redirect.set_cookie(key="temp_role", value=usuario.rol)
+    redirect.set_cookie(key="temp_user_id", value=str(usuario.id))
 
     return redirect
 
@@ -201,104 +131,43 @@ def login_google(
 
 @app.get("/auth/mfa/setup", response_class=HTMLResponse)
 def configurar_mfa(request: Request):
-
-    """
-    Genera la información necesaria para vincular
-    Google Authenticator.
-
-    Esta ruta es provisional para configurar el MFA.
-    """
-
     email_actual = request.cookies.get(
         "temp_email",
         request.cookies.get("user_email", "usuario@gmail.com")
     )
 
     totp = pyotp.TOTP(MFA_SECRET)
-
     uri = totp.provisioning_uri(
         name=email_actual,
         issuer_name="Solicitudes APP"
     )
 
-    # Generar QR en memoria
     qr = qrcode.make(uri)
-
     buffer = io.BytesIO()
-
     qr.save(buffer, format="PNG")
-
-    qr_base64 = base64.b64encode(
-        buffer.getvalue()
-    ).decode("utf-8")
+    qr_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
     return f"""
     <!DOCTYPE html>
-
     <html lang="es">
-
     <head>
-
         <meta charset="UTF-8">
-
         <title>Configurar Google Authenticator</title>
-
         <style>
-
-            body {{
-                font-family: Arial, sans-serif;
-                text-align: center;
-                margin-top: 50px;
-            }}
-
-            img {{
-                width: 250px;
-                height: 250px;
-                margin: 20px;
-            }}
-
-            .secret {{
-                font-family: monospace;
-                background: #eee;
-                padding: 10px;
-                display: inline-block;
-            }}
-
+            body {{ font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }}
+            img {{ width: 250px; height: 250px; margin: 20px; }}
+            .secret {{ font-family: monospace; background: #eee; padding: 10px; display: inline-block; }}
         </style>
-
     </head>
-
     <body>
-
         <h1>Configurar Google Authenticator</h1>
-
-        <p>
-            Escanea este código QR con Google Authenticator.
-        </p>
-
-        <img
-            src="data:image/png;base64,{qr_base64}"
-            alt="QR Google Authenticator"
-        >
-
-        <p>
-            Si no puedes escanear el QR, utiliza esta clave:
-        </p>
-
-        <p class="secret">
-            {MFA_SECRET}
-        </p>
-
-        <p>
-            Después de configurarlo, regresa al login.
-        </p>
-
-        <a href="/">
-            Volver al login
-        </a>
-
+        <p>Escanea este código QR con Google Authenticator.</p>
+        <img src="data:image/png;base64,{qr_base64}" alt="QR Google Authenticator">
+        <p>Si no puedes escanear el QR, utiliza esta clave:</p>
+        <p class="secret">{MFA_SECRET}</p>
+        <p>Después de configurarlo, regresa al login.</p>
+        <a href="/">Volver al login</a>
     </body>
-
     </html>
     """
 
@@ -309,12 +178,6 @@ def configurar_mfa(request: Request):
 
 @app.get("/auth/mfa", response_class=HTMLResponse)
 def pantalla_mfa(request: Request):
-
-    """
-    Pantalla 2:
-    Validación del código generado por Google Authenticator.
-    """
-
     return templates.TemplateResponse(
         request=request,
         name="mfa.html"
@@ -331,20 +194,9 @@ def verificar_mfa(
     codigo_otp: str = Form(...),
     db: Session = Depends(get_db)
 ):
-
-    """
-    Verifica el código de 6 dígitos generado
-    por Google Authenticator.
-    """
-
-    # Crear objeto TOTP utilizando nuestro secreto
     totp = pyotp.TOTP(MFA_SECRET)
 
-    # Verificar código
-    codigo_valido = totp.verify(codigo_otp)
-
-    if not codigo_valido:
-
+    if not totp.verify(codigo_otp):
         return templates.TemplateResponse(
             request=request,
             name="mfa.html",
@@ -353,17 +205,8 @@ def verificar_mfa(
             }
         )
 
-    # Recuperar datos temporales guardados en /auth/google
-    email = request.cookies.get(
-        "temp_email",
-        "usuario@gmail.com"
-    )
-
-    role = request.cookies.get(
-        "temp_role",
-        "USER"
-    )
-
+    email = request.cookies.get("temp_email", "usuario@gmail.com")
+    role = request.cookies.get("temp_role", "USER")
     user_id = request.cookies.get("temp_user_id")
 
     if user_id:
@@ -379,33 +222,19 @@ def verificar_mfa(
                 db.commit()
 
         except (SQLAlchemyError, ValueError):
-            # No bloqueamos el login por esto; solo no se
-            # registra la fecha de último acceso.
             db.rollback()
 
-    # Crear sesión
     redirect = RedirectResponse(
         url="/dashboard",
         status_code=303
     )
 
-    redirect.set_cookie(
-        key="user_email",
-        value=email
-    )
-
-    redirect.set_cookie(
-        key="user_role",
-        value=role
-    )
+    redirect.set_cookie(key="user_email", value=email)
+    redirect.set_cookie(key="user_role", value=role)
 
     if user_id:
-        redirect.set_cookie(
-            key="user_id",
-            value=user_id
-        )
+        redirect.set_cookie(key="user_id", value=user_id)
 
-    # Eliminar cookies temporales
     redirect.delete_cookie("temp_email")
     redirect.delete_cookie("temp_role")
     redirect.delete_cookie("temp_user_id")
@@ -419,7 +248,6 @@ def verificar_mfa(
 
 @app.get("/logout")
 def logout():
-
     redirect = RedirectResponse(
         url="/",
         status_code=303
@@ -437,8 +265,7 @@ def logout():
 # ==========================================
 
 @app.get("/dashboard", response_class=HTMLResponse)
-def pantalla_dashboard(request: Request):
-
+def pantalla_dashboard(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request)
 
     if not user:
@@ -447,31 +274,20 @@ def pantalla_dashboard(request: Request):
             status_code=303
         )
 
-    # ADMIN puede ver todas las solicitudes
+    # Filtrar únicamente registros activos (no borrados)
+    query = db.query(Solicitud).filter(Solicitud.borrado.is_(False))
+
     if user["role"] == "ADMIN":
-
-        solicitudes_visibles = [
-            r
-            for r in MOCK_REQUESTS
-            if not r["deleted"]
-        ]
-
+        # El Administrador ve absolutamente todas las solicitudes activas
+        solicitudes_visibles = query.all()
     else:
-
-        # Usuario normal:
-        # solicitudes aceptadas + sus propias solicitudes
-        solicitudes_visibles = [
-
-            r
-            for r in MOCK_REQUESTS
-
-            if not r["deleted"]
-            and (
-                r["status"] == "ACCEPTED"
-                or r["user_email"] == user["email"]
-            )
-
-        ]
+        user_uuid = uuid.UUID(user["id"])
+        # El usuario común ve:
+        # 1. Sus propias solicitudes (independientemente del estatus: Pendiente, Aceptado, Rechazado)
+        # 2. Las solicitudes de otros usuarios SI Y SOLO SI su estatus es 'Aceptado'
+        solicitudes_visibles = query.filter(
+            (Solicitud.user_id == user_uuid) | (Solicitud.estatus == "Aceptado")
+        ).all()
 
     return templates.TemplateResponse(
         request=request,
@@ -489,11 +305,9 @@ def pantalla_dashboard(request: Request):
 
 @app.get("/requests/new", response_class=HTMLResponse)
 def pantalla_crear_solicitud(request: Request):
-
     user = get_current_user(request)
 
     if not user:
-
         return RedirectResponse(
             url="/",
             status_code=303
@@ -510,47 +324,31 @@ def pantalla_crear_solicitud(request: Request):
 
 @app.post("/requests/new")
 def crear_solicitud(
-
     request: Request,
-
     organizacion: str = Form(...),
-
     contacto: str = Form(...),
-
-    descripcion: str = Form(...)
-
+    descripcion: str = Form(...),
+    db: Session = Depends(get_db)
 ):
-
     user = get_current_user(request)
 
     if not user:
-
         return RedirectResponse(
             url="/",
             status_code=303
         )
 
-    nueva_solicitud = {
-
-        "id": len(MOCK_REQUESTS) + 1,
-
-        "organizacion": organizacion,
-
-        "contacto": contacto,
-
-        "descripcion": descripcion,
-
-        "status": "PENDING",
-
-        "deleted": False,
-
-        "user_email": user["email"]
-
-    }
-
-    MOCK_REQUESTS.append(
-        nueva_solicitud
+    nueva_solicitud = Solicitud(
+        organizacion=organizacion,
+        correo_contacto=contacto,
+        descripcion=descripcion,
+        estatus="Pendiente",
+        borrado=False,
+        user_id=uuid.UUID(user["id"])
     )
+
+    db.add(nueva_solicitud)
+    db.commit()
 
     return RedirectResponse(
         url="/dashboard",
@@ -559,37 +357,34 @@ def crear_solicitud(
 
 
 # ==========================================
-# ELIMINAR SOLICITUD
+# ELIMINAR SOLICITUD (SOFT DELETE)
 # ==========================================
 
 @app.post("/requests/delete/{req_id}")
 def borrar_solicitud(
     request: Request,
-    req_id: int
+    req_id: int,
+    db: Session = Depends(get_db)
 ):
-
     user = get_current_user(request)
 
     if not user:
-
         return RedirectResponse(
             url="/",
             status_code=303
         )
 
-    for r in MOCK_REQUESTS:
+    solicitud = db.query(Solicitud).filter(Solicitud.id == req_id).first()
 
-        if r["id"] == req_id:
+    if solicitud:
+        user_uuid = uuid.UUID(user["id"])
 
-            # ADMIN o creador
-            if (
-                user["role"] == "ADMIN"
-                or r["user_email"] == user["email"]
-            ):
-
-                r["deleted"] = True
-
-            break
+        # ADMIN o el creador de la solicitud
+        if user["role"] == "ADMIN" or solicitud.user_id == user_uuid:
+            solicitud.borrado = True
+            solicitud.fecborrado = datetime.utcnow()
+            solicitud.fecact = datetime.utcnow()
+            db.commit()
 
     return RedirectResponse(
         url="/dashboard",
@@ -602,80 +397,76 @@ def borrar_solicitud(
 # ==========================================
 
 @app.get("/admin", response_class=HTMLResponse)
-def pantalla_admin(request: Request):
-
+def pantalla_admin(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request)
 
-    # Solo ADMIN
     if not user or user["role"] != "ADMIN":
-
         return RedirectResponse(
             url="/dashboard",
             status_code=303
         )
 
-    solicitudes_eliminadas = [
-        r
-        for r in MOCK_REQUESTS
-        if r["deleted"]
-    ]
+    solicitudes_eliminadas = (
+        db.query(Solicitud)
+        .filter(Solicitud.borrado.is_(True))
+        .all()
+    )
 
-    solicitudes_todas = [
-        r
-        for r in MOCK_REQUESTS
-        if not r["deleted"]
-    ]
+    solicitudes_todas = (
+        db.query(Solicitud)
+        .filter(Solicitud.borrado.is_(False))
+        .all()
+    )
 
     return templates.TemplateResponse(
-
         request=request,
-
         name="admin.html",
-
         context={
-
             "eliminadas": solicitudes_eliminadas,
-
             "todas": solicitudes_todas,
-
             "user": user
-
         }
-
     )
 
 
 # ==========================================
-# CAMBIAR STATUS
+# CAMBIAR STATUS + AUDITORÍA (HISTORIAL)
 # ==========================================
 
 @app.post("/admin/status/{req_id}")
 def cambiar_status(
-
     request: Request,
-
     req_id: int,
-
-    status: str = Form(...)
-
+    status: str = Form(...),  # Espera 'Pendiente', 'Aceptado' o 'Rechazado'
+    db: Session = Depends(get_db)
 ):
-
     user = get_current_user(request)
 
     if not user or user["role"] != "ADMIN":
-
         return RedirectResponse(
             url="/dashboard",
             status_code=303
         )
 
-    for r in MOCK_REQUESTS:
+    solicitud = db.query(Solicitud).filter(Solicitud.id == req_id).first()
 
-        if r["id"] == req_id:
+    if solicitud and solicitud.estatus != status:
+        estatus_anterior = solicitud.estatus
 
-            r["status"] = status
+        # Actualizar la solicitud
+        solicitud.estatus = status
+        solicitud.fecact = datetime.utcnow()
 
-            break
+        # Insertar registro en el historial de cambios
+        historial = HistorialSolicitud(
+            sol_id=solicitud.id,
+            estatus_antiguo=estatus_anterior,
+            estatus_actual=status,
+            modificado_por=uuid.UUID(user["id"])
+        )
+
+        db.add(historial)
+        db.commit()
 
     return RedirectResponse(
         url="/admin",
@@ -688,7 +479,6 @@ def cambiar_status(
 # ==========================================
 
 if __name__ == "__main__":
-
     import uvicorn
 
     uvicorn.run(
