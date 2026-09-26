@@ -1,16 +1,8 @@
-import os
-import shutil
-from fastapi import FastAPI, Request, Form, UploadFile, File, Response
+from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
 
-app = FastAPI(title="Solicitudes APP")
-
-# Crear carpeta para subir imágenes custom
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+app = FastAPI(title="Sistema de Solicitudes")
 
 templates = Jinja2Templates(directory="templates")
 
@@ -22,25 +14,23 @@ MOCK_REQUESTS = [
         "id": 1,
         "organizacion": "Tech Corp",
         "contacto": "juan@tech.com",
-        "descripcion": "Soporte para servidores",
-        "status": "ACCEPTED", # Solo aceptadas se ven para usuarios normales
+        "descripcion": "Soporte para servidores de producción y mantenimiento preventivo.",
+        "status": "ACCEPTED",  # Visible para usuarios normales
         "deleted": False,
-        "imagen_url": "https://picsum.photos/400/225?random=1",
         "user_email": "usuario@gmail.com"
     },
     {
         "id": 2,
         "organizacion": "Dev Inc",
         "contacto": "ana@dev.com",
-        "descripcion": "Licencia de software",
-        "status": "PENDING", # No visible para usuarios normales
+        "descripcion": "Renovación de licencias de software de desarrollo.",
+        "status": "PENDING",   # Solo visible para ADMIN o el creador de la solicitud
         "deleted": False,
-        "imagen_url": "https://picsum.photos/400/225?random=2",
         "user_email": "otro@gmail.com"
     }
 ]
 
-# Helper para obtener usuario actual desde Cookies
+# Helper para obtener el usuario actual desde las Cookies
 def get_current_user(request: Request):
     user_email = request.cookies.get("user_email")
     user_role = request.cookies.get("user_role")
@@ -58,7 +48,7 @@ def pantalla_login(request: Request):
     return templates.TemplateResponse(request=request, name="login.html")
 
 @app.post("/auth/google")
-def login_google(response: Response, role: str = Form(...), email: str = Form(...)):
+def login_google(role: str = Form(...), email: str = Form(...)):
     """Guarda temporalmente el email y rol seleccionado en cookies"""
     redirect = RedirectResponse(url="/auth/mfa", status_code=303)
     redirect.set_cookie(key="temp_email", value=email)
@@ -71,8 +61,8 @@ def pantalla_mfa(request: Request):
     return templates.TemplateResponse(request=request, name="mfa.html")
 
 @app.post("/auth/mfa/verify")
-def verificar_mfa(request: Request, response: Response, codigo_otp: str = Form(...)):
-    """Simulación de código de 6 dígitos que activa la sesión"""
+def verificar_mfa(request: Request, codigo_otp: str = Form(...)):
+    """Simulación de código OTP que confirma e inicia la sesión"""
     email = request.cookies.get("temp_email", "usuario@gmail.com")
     role = request.cookies.get("temp_role", "USER")
 
@@ -83,7 +73,7 @@ def verificar_mfa(request: Request, response: Response, codigo_otp: str = Form(.
 
 @app.get("/logout")
 def logout():
-    """Cerrar Sesión"""
+    """Cierra la sesión actual eliminando las cookies"""
     redirect = RedirectResponse(url="/", status_code=303)
     redirect.delete_cookie("user_email")
     redirect.delete_cookie("user_role")
@@ -99,11 +89,12 @@ def pantalla_dashboard(request: Request):
     if not user:
         return RedirectResponse(url="/", status_code=303)
 
-    # REQUERIMIENTO 2: Usuarios normales SOLO ven las solicitudes 'ACCEPTED'
+    # Filtrado por ROL:
+    # - ADMIN ve todas las solicitudes no eliminadas.
+    # - USER solo ve las que están en estado ACCEPTED o las que él mismo creó (aunque estén PENDING).
     if user["role"] == "ADMIN":
         solicitudes_visibles = [r for r in MOCK_REQUESTS if not r["deleted"]]
     else:
-        # Si es usuario normal, también puede ver las suyas aunque estén PENDING
         solicitudes_visibles = [
             r for r in MOCK_REQUESTS 
             if not r["deleted"] and (r["status"] == "ACCEPTED" or r["user_email"] == user["email"])
@@ -125,38 +116,29 @@ def pantalla_crear_solicitud(request: Request):
         return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse(request=request, name="create_request.html", context={"user": user})
 
-# REQUERIMIENTO 1: Crear solicitud con contacto (Gmail) y Subida de Foto Custom
 @app.post("/requests/new")
-async def crear_solicitud(
+def crear_solicitud(
     request: Request,
     organizacion: str = Form(...),
     contacto: str = Form(...),
-    descripcion: str = Form(...),
-    imagen: UploadFile = File(...)
+    descripcion: str = Form(...)
 ):
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/", status_code=303)
 
-    # Guardar imagen en la carpeta uploads
-    imagen_path = f"{UPLOAD_DIR}/{imagen.filename}"
-    with open(imagen_path, "wb") as buffer:
-        shutil.copyfileobj(imagen.file, buffer)
-
     nueva_solicitud = {
         "id": len(MOCK_REQUESTS) + 1,
         "organizacion": organizacion,
-        "contacto": contacto, # Gmail / Contacto custom
+        "contacto": contacto,
         "descripcion": descripcion,
-        "status": "PENDING", # Inicia como pendiente
+        "status": "PENDING",
         "deleted": False,
-        "imagen_url": f"/{imagen_path}", # Ruta local de la imagen custom
         "user_email": user["email"]
     }
     MOCK_REQUESTS.append(nueva_solicitud)
     return RedirectResponse(url="/dashboard", status_code=303)
 
-# REQUERIMIENTO 4: Usuario solo borra sus propias solicitudes
 @app.post("/requests/delete/{req_id}")
 def borrar_solicitud(request: Request, req_id: int):
     user = get_current_user(request)
@@ -165,7 +147,7 @@ def borrar_solicitud(request: Request, req_id: int):
 
     for r in MOCK_REQUESTS:
         if r["id"] == req_id:
-            # Si es admin o si es el creador de la solicitud
+            # Solo se permite borrar si es ADMIN o si es el usuario dueño del registro
             if user["role"] == "ADMIN" or r["user_email"] == user["email"]:
                 r["deleted"] = True
             break
@@ -175,22 +157,22 @@ def borrar_solicitud(request: Request, req_id: int):
 # PANTALLAS ADMINISTRADOR
 # ==========================================
 
-# REQUERIMIENTO 4: Bloquear pantalla Admin a Usuarios Normales
 @app.get("/admin", response_class=HTMLResponse)
 def pantalla_admin(request: Request):
     user = get_current_user(request)
+    # Bloqueo estricto si no es ADMIN
     if not user or user["role"] != "ADMIN":
-        return RedirectResponse(url="/dashboard", status_code=303) # Denegar acceso
+        return RedirectResponse(url="/dashboard", status_code=303)
 
     solicitudes_eliminadas = [r for r in MOCK_REQUESTS if r["deleted"]]
-    solicitudes_todas = [r for r in MOCK_REQUESTS if not r["deleted"]]
+    solicitudes_activas = [r for r in MOCK_REQUESTS if not r["deleted"]]
 
     return templates.TemplateResponse(
         request=request, 
         name="admin.html", 
         context={
             "eliminadas": solicitudes_eliminadas,
-            "todas": solicitudes_todas,
+            "todas": solicitudes_activas,
             "user": user
         }
     )

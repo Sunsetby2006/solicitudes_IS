@@ -2,32 +2,34 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Solicitudes APP</title>
+    <title>Sistema de Solicitudes</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
 </head>
-<body class="bg-light">
+<body class="bg-light" style="font-family: Arial, sans-serif;">
     {% if user %}
-    <nav class="navbar navbar-dark bg-dark mb-4">
-        <div class="container">
-            <a class="navbar-brand" href="/dashboard">Solicitudes APP</a>
-            <div class="d-flex align-items-center gap-3">
-                <span class="text-white-50 small">
-                    👤 {{ user.email }} (<strong>{{ user.role }}</strong>)
+    <header class="bg-white border-bottom border-2 border-dark mb-4">
+        <div class="container py-2 d-flex justify-content-between align-items-center">
+            <a class="navbar-brand fw-bold text-dark fs-4 text-uppercase tracking-wide" href="/dashboard">
+                [ SYS_SOLICITUDES ]
+            </a>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-light text-dark border border-dark rounded-0 me-2">
+                    USUARIO: {{ user.email }} | ROL: {{ user.role }}
                 </span>
-                <a href="/dashboard" class="btn btn-outline-light btn-sm">Inicio</a>
+                <a href="/dashboard" class="btn btn-outline-dark btn-sm rounded-0 fw-bold">INICIO</a>
                 
-                <!-- REQUERIMIENTO 4: Ocultar botón Admin si es usuario normal -->
                 {% if user.role == "ADMIN" %}
-                <a href="/admin" class="btn btn-outline-warning btn-sm">Panel Admin</a>
+                <a href="/admin" class="btn btn-dark btn-sm rounded-0 fw-bold">PANEL ADMIN</a>
                 {% endif %}
 
-                <a href="/logout" class="btn btn-outline-danger btn-sm">Salir</a>
+                <a href="/logout" class="btn btn-danger btn-sm rounded-0 fw-bold">SALIR</a>
             </div>
         </div>
-    </nav>
+    </header>
     {% endif %}
-    <div class="container">
+
+    <main class="container">
         {% block content %}{% endblock %}
-    </div>
+    </main>
 </body>
 </html>
