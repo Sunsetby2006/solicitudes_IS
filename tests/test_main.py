@@ -43,6 +43,16 @@ client = TestClient(app)
 # Helpers
 # ==========================================
 
+def _sin_comillas(valor):
+    """Starlette envuelve en comillas los valores de cookie que traen
+    caracteres como '@' (ej. un email). No es un bug: request.cookies
+    ya las quita solo al leerlas de vuelta en la app. Aquí las quitamos
+    para comparar el valor real."""
+    if valor is None:
+        return None
+    return valor.strip('"')
+
+
 def _obtener_csrf_token():
     """Simula lo que hace un navegador: un GET normal deja la cookie
     csrf_token puesta por el middleware; la leemos para reusarla."""
@@ -117,9 +127,9 @@ def test_tc01_login_correo_valido_redirige_a_mfa():
 
     assert response.status_code == 303
     assert response.headers["location"] == "/auth/mfa"
-    assert response.cookies.get("temp_email") == "usuario@gmail.com"
-    assert response.cookies.get("temp_role") == "ADMIN"
-    assert response.cookies.get("temp_user_id") == "11111111-1111-1111-1111-111111111111"
+    assert _sin_comillas(response.cookies.get("temp_email")) == "usuario@gmail.com"
+    assert _sin_comillas(response.cookies.get("temp_role")) == "ADMIN"
+    assert _sin_comillas(response.cookies.get("temp_user_id")) == "11111111-1111-1111-1111-111111111111"
 
 
 # ==========================================
