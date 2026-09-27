@@ -1,10 +1,9 @@
 fastapi
-uvicorn
+uvicorn[standard]
 jinja2
 python-multipart
-dotenv
-psycopg2-binary
-sqlalchemy
-python-dotenv
 pyotp
-qrcode
+qrcode[pil]
+sqlalchemy
+psycopg2-binary
+python-dotenv
