@@ -67,6 +67,14 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Verificar que la app importa sin errores
+        env:
+          # Valores falsos: solo para que create_engine pueda armar
+          # la URL sin tronar. No se abre ninguna conexión real aquí.
+          DB_USER: ci_dummy
+          DB_PASSWORD: ci_dummy
+          DB_HOST: localhost
+          DB_PORT: "5432"
+          DB_NAME: ci_dummy
         run: |
           cd codigos
           python -c "import main; print('main.py importa correctamente')"
