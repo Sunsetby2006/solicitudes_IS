@@ -11,18 +11,19 @@
             <h5 class="fw-bold m-0 text-uppercase">[ AUTENTICACIÓN ]</h5>
         </div>
 
+        {% if error %}
+        <div class="alert alert-danger rounded-0 border border-danger py-2 small text-center">
+            {{ error }}
+        </div>
+        {% endif %}
+
         <form action="/auth/google" method="POST">
-            <div class="mb-3">
+            <div class="mb-4">
                 <label class="form-label small fw-bold text-uppercase">Correo Electrónico:</label>
                 <input type="email" name="email" class="form-control rounded-0 border-dark" value="usuario@gmail.com" required>
-            </div>
-
-            <div class="mb-4">
-                <label class="form-label small fw-bold text-uppercase">Seleccionar Rol de Sesión:</label>
-                <select name="role" class="form-select rounded-0 border-dark">
-                    <option value="USER">Usuario Normal</option>
-                    <option value="ADMIN">Administrador</option>
-                </select>
+                <div class="form-text small">
+                    Debe existir como usuario activo en la base de datos. 
+                </div>
             </div>
 
             <button type="submit" class="btn btn-dark rounded-0 border border-dark w-100 py-2 fw-bold text-uppercase">

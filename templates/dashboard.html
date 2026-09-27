@@ -29,13 +29,14 @@
                 <div class="card-body d-flex flex-column p-3">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <h5 class="card-title fw-bold text-dark m-0 text-uppercase">{{ s.organizacion }}</h5>
-                        <span class="badge rounded-0 border border-dark {% if s.status == 'ACCEPTED' %}bg-success text-white{% elif s.status == 'DECLINED' %}bg-danger text-white{% else %}bg-warning text-dark{% endif %}">
-                            {{ s.status }}
+                        
+                        <span class="badge rounded-0 border border-dark {% if s.estatus == 'Aceptado' %}bg-success text-white{% elif s.estatus == 'Rechazado' %}bg-danger text-white{% else %}bg-warning text-dark{% endif %}">
+                            {{ s.estatus }}
                         </span>
                     </div>
 
                     <p class="small text-muted mb-2 border-bottom border-dark pb-1">
-                        <b>CONTACTO:</b> {{ s.contacto }}
+                        <b>CONTACTO:</b> {{ s.correo_contacto }}
                     </p>
                     
                     <p class="card-text text-dark mb-3 flex-grow-1 small">
@@ -43,15 +44,16 @@
                     </p>
 
                     <div class="d-flex justify-content-between align-items-center pt-2 border-top border-dark">
-                        <!-- ENLACE A GMAIL WEB DIRECTO -->
-                        <a href="https://mail.google.com/mail/?view=cm&fs=1&to={{ s.contacto }}&su=Contacto%20Solicitud%20-%20{{ s.organizacion }}" 
+                        <!-- ENLACE DIRECTO A GMAIL -->
+                        <a href="https://mail.google.com/mail/?view=cm&fs=1&to={{ s.correo_contacto }}&su=Contacto%20Solicitud%20-%20{{ s.organizacion }}" 
                            target="_blank" 
                            rel="noopener noreferrer" 
                            class="btn btn-sm btn-outline-dark rounded-0 fw-bold">
                             ENVIAR CORREO
                         </a>
 
-                        {% if user.role == 'ADMIN' or user.email == s.user_email %}
+                        <!-- PERMISOS DE ELIMINACIÓN: ADMIN o CREADOR DE LA SOLICITUD -->
+                        {% if user.role == 'ADMIN' or user.id == s.user_id|string %}
                         <form action="/requests/delete/{{ s.id }}" method="POST" class="d-inline">
                             <button type="submit" class="btn btn-sm btn-danger rounded-0 border border-dark fw-bold" onclick="return confirm('¿Borrar registro?')">
                                 ELIMINAR

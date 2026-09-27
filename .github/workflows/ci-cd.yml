@@ -1,0 +1,88 @@
+name: CI/CD - Solicitudes APP
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  # ==========================================
+  # 1) CODIGO — chequeo estático rápido
+  # ==========================================
+  codigo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar flake8
+        run: pip install flake8
+
+      - name: Revisar errores reales de sintaxis/lógica
+        run: |
+          # Solo falla ante errores graves (sintaxis, nombres indefinidos, etc.)
+          # No exige un estilo de formato particular.
+          flake8 codigos/ tests/ --select=E9,F63,F7,F82 --show-source
+
+  # ==========================================
+  # 2) TEST — pendiente de definir casos de prueba
+  # ==========================================
+  # TODO: cuando se definan los casos de prueba unitarios,
+  # reemplazar este paso por: pip install pytest httpx && pytest tests/ -v
+  test:
+    needs: codigo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pendiente — aún no hay casos de prueba definidos
+        run: |
+          echo "Etapa de pruebas unitarias pendiente de definir."
+          echo "No bloquea el pipeline por ahora."
+
+  # ==========================================
+  # 3) BUILD — validar que la app instala e importa limpio
+  # ==========================================
+  # Sin Docker: Render usa runtime Python nativo, así que esta etapa
+  # valida lo que realmente importa para ese runtime — que las
+  # dependencias instalen bien y que main.py no tenga errores de
+  # import (sin necesitar una DB real: la conexión es diferida).
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Verificar que la app importa sin errores
+        run: |
+          cd codigos
+          python -c "import main; print('main.py importa correctamente')"
+
+  # ==========================================
+  # 4) DEPLOY — disparar el deploy en Render
+  # ==========================================
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar deploy hook de Render
+        run: |
+          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ]; then
+            echo "Falta configurar el secret RENDER_DEPLOY_HOOK_URL en el repo."
+            exit 1
+          fi
+          curl -f -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
