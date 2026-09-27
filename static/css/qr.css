@@ -1,0 +1,18 @@
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    margin-top: 50px;
+}
+
+img {
+    width: 250px;
+    height: 250px;
+    margin: 20px;
+}
+
+.secret {
+    font-family: monospace;
+    background: #eee;
+    padding: 10px;
+    display: inline-block;
+}

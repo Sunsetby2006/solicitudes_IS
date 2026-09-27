@@ -2,12 +2,14 @@ import io
 import os
 import uuid
 import base64
+import secrets
 from datetime import datetime
 
 import pyotp
 import qrcode
 
-from fastapi import FastAPI, Request, Form, Depends
+from fastapi import FastAPI, Request, Form, Depends, HTTPException
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -19,6 +21,43 @@ from modelos import Usuario, Solicitud, HistorialSolicitud
 
 
 app = FastAPI(title="Solicitudes APP")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    csrf_token = request.cookies.get("csrf_token")
+
+    if not csrf_token:
+        csrf_token = secrets.token_urlsafe(32)
+
+    request.state.csrf_token = csrf_token
+
+    response = await call_next(request)
+
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    
+    response.headers["Content-Security-Policy"] = (
+    "default-src 'self'; "
+    "style-src 'self' https://cdn.jsdelivr.net; "    "img-src 'self' data:; "
+    "font-src 'self' https://cdn.jsdelivr.net; "
+    "connect-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none';"
+)
+
+    if not request.cookies.get("csrf_token"):
+        response.set_cookie(
+            key="csrf_token",
+            value=csrf_token,
+            httponly=True,
+            samesite="lax"
+        )
+
+    return response
 
 
 # ==========================================
@@ -63,16 +102,32 @@ def get_current_user(request: Request):
         "id": user_id
     }
 
+def validar_csrf(request: Request, csrf_token: str):
+    token_cookie = request.cookies.get("csrf_token")
 
+    if not token_cookie or not csrf_token:
+        raise HTTPException(
+            status_code=403,
+            detail="Token CSRF faltante."
+        )
+
+    if not secrets.compare_digest(token_cookie, csrf_token):
+        raise HTTPException(
+            status_code=403,
+            detail="Token CSRF inválido."
+        )
 # ==========================================
 # PANTALLAS DE AUTENTICACIÓN
 # ==========================================
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 def pantalla_login(request: Request):
     return templates.TemplateResponse(
         request=request,
-        name="login.html"
+        name="login.html",
+        context={
+            "csrf_token": request.state.csrf_token
+        }
     )
 
 
@@ -84,8 +139,10 @@ def pantalla_login(request: Request):
 def login_google(
     request: Request,
     email: str = Form(...),
+    csrfToken: str = Form(...),
     db: Session = Depends(get_db)
 ):
+    validar_csrf(request, csrfToken)
     try:
         usuario = (
             db.query(Usuario)
@@ -100,7 +157,8 @@ def login_google(
             request=request,
             name="login.html",
             context={
-                "error": "No se pudo conectar con la base de datos. Revisa tus variables de entorno."
+                "error": "No se pudo conectar con la base de datos. Revisa tus variables de entorno.",
+                "csrf_token": request.state.csrf_token
             }
         )
 
@@ -109,7 +167,8 @@ def login_google(
             request=request,
             name="login.html",
             context={
-                "error": "No existe una cuenta activa con ese correo."
+                "error": "No existe una cuenta activa con ese correo.",
+                "csrf_token": request.state.csrf_token
             }
         )
 
@@ -149,17 +208,13 @@ def configurar_mfa(request: Request):
 
     return f"""
     <!DOCTYPE html>
-    <html lang="es">
-    <head>
-        <meta charset="UTF-8">
-        <title>Configurar Google Authenticator</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }}
-            img {{ width: 250px; height: 250px; margin: 20px; }}
-            .secret {{ font-family: monospace; background: #eee; padding: 10px; display: inline-block; }}
-        </style>
-    </head>
-    <body>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Configurar Google Authenticator</title>
+    <link rel="stylesheet" href="/static/css/qr.css">
+</head>
+<body>
         <h1>Configurar Google Authenticator</h1>
         <p>Escanea este código QR con Google Authenticator.</p>
         <img src="data:image/png;base64,{qr_base64}" alt="QR Google Authenticator">
@@ -180,7 +235,10 @@ def configurar_mfa(request: Request):
 def pantalla_mfa(request: Request):
     return templates.TemplateResponse(
         request=request,
-        name="mfa.html"
+        name="mfa.html",
+        context={
+            "csrf_token": request.state.csrf_token
+        }
     )
 
 
@@ -192,8 +250,12 @@ def pantalla_mfa(request: Request):
 def verificar_mfa(
     request: Request,
     codigo_otp: str = Form(...),
+    csrfToken: str = Form(...),
     db: Session = Depends(get_db)
 ):
+    
+    validar_csrf(request, csrfToken)
+    
     totp = pyotp.TOTP(MFA_SECRET)
 
     if not totp.verify(codigo_otp):
@@ -201,7 +263,8 @@ def verificar_mfa(
             request=request,
             name="mfa.html",
             context={
-                "error": "Código incorrecto o expirado."
+                "error": "Código incorrecto o expirado.",
+                "csrf_token": request.state.csrf_token
             }
         )
 
@@ -294,7 +357,8 @@ def pantalla_dashboard(request: Request, db: Session = Depends(get_db)):
         name="dashboard.html",
         context={
             "solicitudes": solicitudes_visibles,
-            "user": user
+            "user": user,
+            "csrf_token": request.state.csrf_token
         }
     )
 
@@ -317,7 +381,8 @@ def pantalla_crear_solicitud(request: Request):
         request=request,
         name="create_request.html",
         context={
-            "user": user
+            "user": user,
+            "csrf_token": request.state.csrf_token
         }
     )
 
@@ -328,8 +393,11 @@ def crear_solicitud(
     organizacion: str = Form(...),
     contacto: str = Form(...),
     descripcion: str = Form(...),
+    csrfToken: str = Form(...),
     db: Session = Depends(get_db)
 ):
+    validar_csrf(request, csrfToken)
+
     user = get_current_user(request)
 
     if not user:
@@ -364,8 +432,11 @@ def crear_solicitud(
 def borrar_solicitud(
     request: Request,
     req_id: int,
+    csrfToken: str = Form(...),
     db: Session = Depends(get_db)
 ):
+    validar_csrf(request, csrfToken)
+
     user = get_current_user(request)
 
     if not user:
@@ -424,7 +495,8 @@ def pantalla_admin(request: Request, db: Session = Depends(get_db)):
         context={
             "eliminadas": solicitudes_eliminadas,
             "todas": solicitudes_todas,
-            "user": user
+            "user": user,
+            "csrf_token": request.state.csrf_token
         }
     )
 
@@ -438,8 +510,11 @@ def cambiar_status(
     request: Request,
     req_id: int,
     status: str = Form(...),  # Espera 'Pendiente', 'Aceptado' o 'Rechazado'
+    csrfToken: str = Form(...),
     db: Session = Depends(get_db)
 ):
+    validar_csrf(request, csrfToken)
+
     user = get_current_user(request)
 
     if not user or user["role"] != "ADMIN":

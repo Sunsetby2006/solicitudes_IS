@@ -31,26 +31,47 @@ jobs:
           flake8 codigos/ tests/ --select=E9,F63,F7,F82 --show-source
 
   # ==========================================
-  # 2) TEST — pendiente de definir casos de prueba
+  # 2) TEST — casos automatizados de la matriz de pruebas
   # ==========================================
-  # TODO: cuando se definan los casos de prueba unitarios,
-  # reemplazar este paso por: pip install pytest httpx && pytest tests/ -v
+  # Cubre TC-01, TC-02, TC-07 y TC-20 (ver matriz_pruebas_solicitudes.xlsx).
+  # No necesita una Postgres real: usa app.dependency_overrides para
+  # simular get_db, o ni siquiera llega a tocar la DB.
   test:
     needs: codigo
     runs-on: ubuntu-latest
     steps:
-      - name: Pendiente — aún no hay casos de prueba definidos
-        run: |
-          echo "Etapa de pruebas unitarias pendiente de definir."
-          echo "No bloquea el pipeline por ahora."
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Instalar pytest
+        run: pip install pytest httpx
+
+      - name: Ejecutar pruebas (TC-01, TC-02, TC-07, TC-20)
+        env:
+          # Valores falsos: solo para que create_engine arme la URL
+          # sin tronar al importar main.py. No se abre conexión real.
+          DB_USER: ci_dummy
+          DB_PASSWORD: ci_dummy
+          DB_HOST: localhost
+          DB_PORT: "5432"
+          DB_NAME: ci_dummy
+        run: pytest tests/ -v
 
   # ==========================================
   # 3) BUILD — validar que la app instala e importa limpio
   # ==========================================
-  # Render usa runtime Python nativo, así que esta etapa
+  # Sin Docker: Render usa runtime Python nativo, así que esta etapa
   # valida lo que realmente importa para ese runtime — que las
   # dependencias instalen bien y que main.py no tenga errores de
-  # import.
+  # import (sin necesitar una DB real: la conexión es diferida).
   build:
     needs: test
     runs-on: ubuntu-latest
