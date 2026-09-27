@@ -11,8 +11,12 @@ de pruebas (matriz_pruebas_solicitudes.xlsx):
 
 No requieren una Postgres real: TC-01 y TC-02 sustituyen get_db por
 una sesión falsa (app.dependency_overrides); TC-07 y TC-20 nunca
-llegan a tocar la base de datos (main.py valida el rol/OTP antes de
-consultarla), así que corren tal cual contra la app real.
+llegan a tocar la base de datos.
+
+Desde que se agregó protección CSRF a main.py, todo POST exige un
+campo csrfToken que coincida con la cookie csrf_token puesta por el
+middleware. _obtener_csrf_token() simula lo que hace el navegador:
+un GET normal, y de ahí se lee la cookie para reusarla en el POST.
 """
 
 import sys
@@ -36,8 +40,17 @@ client = TestClient(app)
 
 
 # ==========================================
-# Helpers para simular la sesión de SQLAlchemy
+# Helpers
 # ==========================================
+
+def _obtener_csrf_token():
+    """Simula lo que hace un navegador: un GET normal deja la cookie
+    csrf_token puesta por el middleware; la leemos para reusarla."""
+    resp = client.get("/")
+    token = resp.cookies.get("csrf_token") or client.cookies.get("csrf_token")
+    assert token, "El middleware no puso la cookie csrf_token"
+    return token
+
 
 class FakeQuery:
     """Sustituye a Session.query(Usuario).filter(...).first()."""
@@ -94,9 +107,11 @@ def test_tc01_login_correo_valido_redirige_a_mfa():
     )
     app.dependency_overrides[get_db] = _fake_get_db(usuario=usuario_fake)
 
+    csrf_token = _obtener_csrf_token()
+
     response = client.post(
         "/auth/google",
-        data={"email": "usuario@gmail.com"},
+        data={"email": "usuario@gmail.com", "csrfToken": csrf_token},
         follow_redirects=False,
     )
 
@@ -114,9 +129,11 @@ def test_tc01_login_correo_valido_redirige_a_mfa():
 def test_tc02_login_correo_inexistente_muestra_error():
     app.dependency_overrides[get_db] = _fake_get_db(usuario=None)
 
+    csrf_token = _obtener_csrf_token()
+
     response = client.post(
         "/auth/google",
-        data={"email": "falso@gmail.com"},
+        data={"email": "falso@gmail.com", "csrfToken": csrf_token},
     )
 
     assert response.status_code == 200
@@ -128,9 +145,11 @@ def test_tc02_login_correo_inexistente_muestra_error():
 # ==========================================
 
 def test_tc07_otp_incorrecto_muestra_error():
+    csrf_token = _obtener_csrf_token()
+
     response = client.post(
         "/auth/mfa/verify",
-        data={"codigo_otp": "000000"},
+        data={"codigo_otp": "000000", "csrfToken": csrf_token},
     )
 
     assert response.status_code == 200

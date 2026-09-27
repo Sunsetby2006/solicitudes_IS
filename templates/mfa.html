@@ -22,6 +22,7 @@
         {% endif %}
 
         <form action="/auth/mfa/verify" method="POST">
+            <input type="hidden" name="csrfToken" value="{{ csrf_token }}">
             <div class="mb-4">
                 <label class="form-label small fw-bold text-uppercase">
                     Código de Verificación:

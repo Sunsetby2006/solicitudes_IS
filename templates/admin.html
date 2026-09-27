@@ -94,6 +94,11 @@
                         name="status"
                         value="Aceptado"
                     >
+                    <input
+                        type="hidden"
+                        name="csrfToken"
+                        value="{{ csrf_token }}"
+                    >
 
                     <button
                         class="btn btn-success btn-sm"
@@ -111,6 +116,11 @@
                         type="hidden"
                         name="status"
                         value="Rechazado"
+                    >
+                    <input
+                        type="hidden"
+                        name="csrfToken"
+                        value="{{ csrf_token }}"
                     >
 
                     <button

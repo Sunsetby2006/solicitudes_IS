@@ -6,6 +6,7 @@
             <h4 class="fw-bold mb-3 border-bottom border-2 border-dark pb-2 text-uppercase">Formulario de Registro</h4>
             
             <form action="/requests/new" method="POST">
+                <input type="hidden" name="csrfToken" value="{{ csrf_token }}">
                 <div class="mb-3">
                     <label class="form-label fw-bold small text-uppercase">Organización / Empresa:</label>
                     <input type="text" name="organizacion" class="form-control rounded-0 border-dark" required>
