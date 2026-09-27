@@ -47,10 +47,10 @@ jobs:
   # ==========================================
   # 3) BUILD — validar que la app instala e importa limpio
   # ==========================================
-  # Sin Docker: Render usa runtime Python nativo, así que esta etapa
+  # Render usa runtime Python nativo, así que esta etapa
   # valida lo que realmente importa para ese runtime — que las
   # dependencias instalen bien y que main.py no tenga errores de
-  # import (sin necesitar una DB real: la conexión es diferida).
+  # import.
   build:
     needs: test
     runs-on: ubuntu-latest
