@@ -7,7 +7,6 @@ on:
     branches: [main]
 
 jobs:
-
   # ==========================================
   # 1) CODIGO — chequeo estático rápido
   # ==========================================
@@ -33,9 +32,7 @@ jobs:
   # ==========================================
   # 2) TEST — casos automatizados de la matriz de pruebas
   # ==========================================
-  # Cubre TC-01, TC-02, TC-07 y TC-20 (ver matriz_pruebas_solicitudes.xlsx).
-  # No necesita una Postgres real: usa app.dependency_overrides para
-  # simular get_db, o ni siquiera llega a tocar la DB.
+  # No necesita una Postgres real: usa app.dependency_overrides para simular get_db
   test:
     needs: codigo
     runs-on: ubuntu-latest
@@ -54,10 +51,9 @@ jobs:
       - name: Instalar pytest
         run: pip install pytest httpx
 
-      - name: Ejecutar pruebas (TC-01, TC-02, TC-07, TC-20)
+      - name: Ejecutar pruebas 
         env:
           # Valores falsos: solo para que create_engine arme la URL
-          # sin tronar al importar main.py. No se abre conexión real.
           DB_USER: ci_dummy
           DB_PASSWORD: ci_dummy
           DB_HOST: localhost
@@ -68,10 +64,9 @@ jobs:
   # ==========================================
   # 3) BUILD — validar que la app instala e importa limpio
   # ==========================================
-  # Sin Docker: Render usa runtime Python nativo, así que esta etapa
+  # Render usa runtime Python nativo, así que esta etapa
   # valida lo que realmente importa para ese runtime — que las
-  # dependencias instalen bien y que main.py no tenga errores de
-  # import (sin necesitar una DB real: la conexión es diferida).
+  # dependencias instalen bien y que main.py no tenga errores de import
   build:
     needs: test
     runs-on: ubuntu-latest
